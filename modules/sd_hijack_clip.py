@@ -177,6 +177,10 @@ class FrozenCLIPEmbedderWithCustomWordsBase(torch.nn.Module):
         return batch_multipliers, remade_batch_tokens, used_custom_terms, hijack_comments, hijack_fixes, token_count
 
     def forward(self, text):
+        z = self.wrapped(text)
+        return z
+
+    def forward1(self, text):
         use_old = opts.use_old_emphasis_implementation
         if use_old:
             batch_multipliers, remade_batch_tokens, used_custom_terms, hijack_comments, hijack_fixes, token_count = self.process_text_old(text)
@@ -254,7 +258,8 @@ class FrozenCLIPEmbedderWithCustomWords(FrozenCLIPEmbedderWithCustomWordsBase):
     def __init__(self, wrapped, hijack):
         super().__init__(wrapped, hijack)
         self.tokenizer = wrapped.tokenizer
-        self.comma_token = [v for k, v in self.tokenizer.get_vocab().items() if k == ',</w>'][0]
+        # self.comma_token = [v for k, v in self.tokenizer.get_vocab().items() if k == ',</w>'][0]
+        self.comma_token = ','
 
         self.token_mults = {}
         tokens_with_parens = [(k, v) for k, v in self.tokenizer.get_vocab().items() if '(' in k or ')' in k or '[' in k or ']' in k]
@@ -274,7 +279,9 @@ class FrozenCLIPEmbedderWithCustomWords(FrozenCLIPEmbedderWithCustomWordsBase):
                 self.token_mults[ident] = mult
 
         self.id_start = self.wrapped.tokenizer.bos_token_id
-        self.id_end = self.wrapped.tokenizer.eos_token_id
+        # self.id_end = self.wrapped.tokenizer.eos_token_id
+        self.id_end = self.wrapped.tokenizer.sep_token_id
+
         self.id_pad = self.id_end
 
     def tokenize(self, texts):

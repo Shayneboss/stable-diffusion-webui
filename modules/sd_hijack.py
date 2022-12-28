@@ -82,11 +82,13 @@ class StableDiffusionModelHijack:
 
             if hasattr(m.cond_stage_model.transformer, 'text_model'):
                 model_embeddings = m.cond_stage_model.transformer.text_model.embeddings
+                model_embeddings.token_embedding = EmbeddingsWithFixes(model_embeddings.token_embedding, self)
+                m.cond_stage_model = sd_hijack_clip.FrozenCLIPEmbedderWithCustomWords(m.cond_stage_model, self)
             else:
                 model_embeddings = m.cond_stage_model.transformer.embeddings
+                model_embeddings.word_embeddings = EmbeddingsWithFixes(model_embeddings.word_embeddings, self)
+                m.cond_stage_model = sd_hijack_clip.FrozenCLIPEmbedderWithCustomWords(m.cond_stage_model, self)
 
-            model_embeddings.token_embedding = EmbeddingsWithFixes(model_embeddings.token_embedding, self)
-            m.cond_stage_model = sd_hijack_clip.FrozenCLIPEmbedderWithCustomWords(m.cond_stage_model, self)
         elif type(m.cond_stage_model) == ldm.modules.encoders.modules.FrozenOpenCLIPEmbedder:
             m.cond_stage_model.model.token_embedding = EmbeddingsWithFixes(m.cond_stage_model.model.token_embedding, self)
             m.cond_stage_model = sd_hijack_open_clip.FrozenOpenCLIPEmbedderWithCustomWords(m.cond_stage_model, self)
@@ -115,6 +117,8 @@ class StableDiffusionModelHijack:
                 model_embeddings = m.cond_stage_model.transformer.embeddings
             if type(model_embeddings.token_embedding) == EmbeddingsWithFixes:
                 model_embeddings.token_embedding = model_embeddings.token_embedding.wrapped
+            if type(model_embeddings.word_embeddings) == EmbeddingsWithFixes:
+                model_embeddings.word_embeddings = model_embeddings.word_embeddings.warpped
         elif type(m.cond_stage_model) == sd_hijack_open_clip.FrozenOpenCLIPEmbedderWithCustomWords:
             m.cond_stage_model.wrapped.model.token_embedding = m.cond_stage_model.wrapped.model.token_embedding.wrapped
             m.cond_stage_model = m.cond_stage_model.wrapped
