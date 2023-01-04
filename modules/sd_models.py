@@ -228,6 +228,8 @@ def load_model_weights(model, checkpoint_info, vae_file="auto"):
     model.sd_model_checkpoint = checkpoint_file
     model.sd_checkpoint_info = checkpoint_info
 
+    model.logvar = model.logvar.to(devices.device)  # fix for training
+
     sd_vae.delete_base_vae()
     sd_vae.clear_loaded_vae()
     vae_file = sd_vae.resolve_vae(checkpoint_file, vae_file=vae_file)
@@ -276,6 +278,7 @@ def enable_midas_autodownload():
 
     midas.api.load_model = load_model_wrapper
 
+
 def load_model(checkpoint_info=None):
     from modules import lowvram, sd_hijack
     checkpoint_info = checkpoint_info or select_checkpoint()
@@ -310,6 +313,7 @@ def load_model(checkpoint_info=None):
         sd_config.model.params.unet_config.params.use_fp16 = False
 
     sd_model = instantiate_from_config(sd_config.model)
+
     load_model_weights(sd_model, checkpoint_info)
 
     if shared.cmd_opts.lowvram or shared.cmd_opts.medvram:
@@ -322,18 +326,23 @@ def load_model(checkpoint_info=None):
     sd_model.eval()
     shared.sd_model = sd_model
 
+    sd_hijack.model_hijack.embedding_db.load_textual_inversion_embeddings(force_reload=True)  # Reload embeddings after model load as they may or may not fit the model
+
     script_callbacks.model_loaded_callback(sd_model)
 
     print("Model loaded.")
+
     return sd_model
 
 
 def reload_model_weights(sd_model=None, info=None):
     from modules import lowvram, devices, sd_hijack
     checkpoint_info = info or select_checkpoint()
- 
+
     if not sd_model:
         sd_model = shared.sd_model
+
+    current_checkpoint_info = sd_model.sd_checkpoint_info
 
     if sd_model.sd_model_checkpoint == checkpoint_info.filename:
         return
@@ -351,13 +360,19 @@ def reload_model_weights(sd_model=None, info=None):
 
     sd_hijack.model_hijack.undo_hijack(sd_model)
 
-    load_model_weights(sd_model, checkpoint_info)
+    try:
+        load_model_weights(sd_model, checkpoint_info)
+    except Exception as e:
+        print("Failed to load checkpoint, restoring previous")
+        load_model_weights(sd_model, current_checkpoint_info)
+        raise
+    finally:
+        sd_hijack.model_hijack.hijack(sd_model)
+        script_callbacks.model_loaded_callback(sd_model)
 
-    sd_hijack.model_hijack.hijack(sd_model)
-    script_callbacks.model_loaded_callback(sd_model)
-
-    if not shared.cmd_opts.lowvram and not shared.cmd_opts.medvram:
-        sd_model.to(devices.device)
+        if not shared.cmd_opts.lowvram and not shared.cmd_opts.medvram:
+            sd_model.to(devices.device)
 
     print("Weights loaded.")
+
     return sd_model
